@@ -59,7 +59,7 @@
             box-shadow: 0 8px 32px rgba(92,61,46,0.15);
         }
         .login-card h2 { font-size: 1.5rem; color: #5c3d2e; margin-bottom: 6px; text-align: center; }
-        .login-card p { color: #8b7355; text-align: center; margin-bottom: 30px; font-size: 0.9rem; }
+        .login-card > p { color: #8b7355; text-align: center; margin-bottom: 30px; font-size: 0.9rem; }
         .form-group { margin-bottom: 18px; }
         .form-group label { display: block; font-size: 0.85rem; font-weight: 600; color: #5c3d2e; margin-bottom: 6px; }
         .form-group input {
@@ -152,12 +152,14 @@
         .slot-item.available:hover { border-color: #8b5e3c; }
         .slot-item.booked-me { background: #e8f5e9; border-color: #66bb6a; }
         .slot-item.booked-other { background: #fdf2f2; border-color: #ef9a9a; }
+        .slot-item.blocked-by-me { background: #f0f7f0; border-color: #a5d6a7; opacity: 0.8; }
+        .slot-item.blocked-by-other { background: #fdf2f2; border-color: #ef9a9a; opacity: 0.75; }
         .slot-time { font-size: 0.88rem; font-weight: 600; color: #3a2e2a; }
         .slot-duration { font-size: 0.78rem; color: #8b7355; margin-top: 2px; }
         .slot-status { font-size: 0.78rem; font-weight: 600; }
-        .slot-status.available-text { color: #5c8a4a; }
         .slot-status.booked-me-text { color: #388e3c; }
         .slot-status.booked-other-text { color: #c62828; }
+        .slot-status.blocked-text { color: #888; }
         .book-btn {
             background: linear-gradient(135deg, #5c3d2e, #8b5e3c);
             color: white;
@@ -203,7 +205,7 @@
             box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
         .modal h3 { font-size: 1.2rem; color: #5c3d2e; margin-bottom: 8px; }
-        .modal p { color: #8b7355; font-size: 0.9rem; margin-bottom: 20px; }
+        .modal > p { color: #8b7355; font-size: 0.9rem; margin-bottom: 20px; }
         .modal-detail { background: #f5f0eb; border-radius: 8px; padding: 14px; margin-bottom: 20px; }
         .modal-detail p { color: #3a2e2a; font-size: 0.9rem; margin-bottom: 4px; }
         .modal-detail p:last-child { margin-bottom: 0; }
@@ -332,7 +334,7 @@
 
 <div id="appScreen">
     <div class="section-title">Book Your Appointment</div>
-    <div class="section-sub">Select an available time slot below. Sessions are 30, 60, or 90 minutes.</div>
+    <div class="section-sub">Select an available time slot. Sessions are 30, 60, or 90 minutes. Booked sessions block the full duration.</div>
 
     <div class="week-nav">
         <button id="prevWeekBtn" onclick="changeWeek(-1)">&#8592; Prev</button>
@@ -348,6 +350,7 @@
     </div>
 </div>
 
+<!-- BOOKING MODAL -->
 <div class="modal-overlay" id="bookingModal">
     <div class="modal">
         <h3>Book Appointment</h3>
@@ -378,15 +381,15 @@
     let allBookings = {};
     let pollInterval = null;
 
-    // ---- DB ABSTRACTION (uses window.db if available, else in-memory shared via window.db) ----
+    // ---- DB ABSTRACTION ----
     async function dbGet(key) {
         try {
             if (window.db && typeof window.db.get === 'function') {
                 return await window.db.get(key);
             }
         } catch(e) {}
-        // Fallback: in-memory store (works for single session)
-        return window._memStore ? window._memStore[key] : null;
+        if (!window._memStore) window._memStore = {};
+        return window._memStore[key] || null;
     }
 
     async function dbSet(key, data) {
@@ -395,7 +398,6 @@
                 return await window.db.set(key, data);
             }
         } catch(e) {}
-        // Fallback: in-memory store
         if (!window._memStore) window._memStore = {};
         window._memStore[key] = data;
     }
@@ -489,13 +491,24 @@
         return dt < now;
     }
 
+    function timeToMins(timeStr) {
+        const [h, m] = timeStr.split(':').map(Number);
+        return h * 60 + m;
+    }
+
+    function minsToTime(mins) {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+    }
+
+    // Generate all 30-min slots for a day
     function generateSlots(dateStr, dayType) {
         const slots = [];
         let h = 9, m = 0;
-        let endH = dayType === 'monday' ? 13 : 15;
-        let endM = dayType === 'monday' ? 0 : 30;
+        const endMins = dayType === 'monday' ? 13 * 60 : 15 * 60 + 30;
 
-        while (h < endH || (h === endH && m < endM)) {
+        while (h * 60 + m < endMins) {
             const timeStr = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
             slots.push({ dateStr, timeStr });
             m += 30;
@@ -504,12 +517,43 @@
         return slots;
     }
 
+    // Check if a slot start time can fit a given duration within day hours
     function slotFitsDuration(timeStr, duration, dayType) {
-        const [h, m] = timeStr.split(':').map(Number);
-        const startMins = h * 60 + m;
+        const startMins = timeToMins(timeStr);
         const endMins = startMins + duration;
         const dayEndMins = dayType === 'monday' ? 13 * 60 : 15 * 60 + 30;
         return endMins <= dayEndMins;
+    }
+
+    /**
+     * For a given slot, check if it is blocked by any existing booking.
+     * A booking at startTime with duration X blocks all 30-min slots from startTime to startTime+X.
+     * Returns: null (free), { type: 'mine', bookingKey, booking } or { type: 'other', bookingKey, booking }
+     */
+    function getSlotBlockStatus(dateStr, timeStr, bookings) {
+        const slotMins = timeToMins(timeStr);
+
+        for (const [key, booking] of Object.entries(bookings)) {
+            // key format: dateStr_HH:MM  e.g. 2026-04-06_09:00
+            const underIdx = key.indexOf('_');
+            const bDate = key.substring(0, underIdx);
+            const bTime = key.substring(underIdx + 1);
+
+            if (bDate !== dateStr) continue;
+
+            const bStart = timeToMins(bTime);
+            const bEnd = bStart + booking.duration;
+
+            // This slot falls within the booking's time range
+            if (slotMins >= bStart && slotMins < bEnd) {
+                if (booking.userId === currentUser.id) {
+                    return { type: 'mine', bookingKey: key, booking, isStart: slotMins === bStart };
+                } else {
+                    return { type: 'other', bookingKey: key, booking, isStart: slotMins === bStart };
+                }
+            }
+        }
+        return null;
     }
 
     // ---- LOAD & RENDER ----
@@ -544,16 +588,17 @@
 
             const card = document.createElement('div');
             card.className = 'day-card';
+            const safeId = dateStr.replace(/-/g, '_');
             card.innerHTML = `
                 <div class="day-header">
                     <h3>${day.label} — ${formatDisplayDate(day.date)}</h3>
                     <p>Available: ${day.hours}</p>
                 </div>
-                <div class="slots-list" id="slots_${dateStr.replace(/-/g,'_')}"></div>
+                <div class="slots-list" id="slots_${safeId}"></div>
             `;
             grid.appendChild(card);
 
-            const slotsList = card.querySelector(`#slots_${dateStr.replace(/-/g,'_')}`);
+            const slotsList = card.querySelector(`#slots_${safeId}`);
 
             if (isPastDay) {
                 slotsList.innerHTML = '<div class="no-slots">This day has passed.</div>';
@@ -566,14 +611,10 @@
             }
 
             slots.forEach(slot => {
-                const key = slot.dateStr + '_' + slot.timeStr;
-                const booking = allBookings[key];
-                const isMyBooking = booking && booking.userId === currentUser.id;
-                const isOtherBooking = booking && booking.userId !== currentUser.id;
                 const past = isPast(slot.dateStr, slot.timeStr);
+                const blockStatus = getSlotBlockStatus(slot.dateStr, slot.timeStr, allBookings);
 
                 const item = document.createElement('div');
-                item.className = 'slot-item ' + (isMyBooking ? 'booked-me' : isOtherBooking ? 'booked-other' : 'available');
 
                 const [h, m] = slot.timeStr.split(':').map(Number);
                 const ampm = h >= 12 ? 'PM' : 'AM';
@@ -581,31 +622,52 @@
                 const displayTime = `${displayH}:${String(m).padStart(2, '0')} ${ampm}`;
 
                 let rightContent = '';
-                if (isMyBooking) {
-                    rightContent = `
-                        <div>
-                            <div class="slot-status booked-me-text">✓ Your Booking</div>
-                            <div class="slot-duration">${booking.duration} min</div>
-                        </div>
-                        ${!past ? `<button class="cancel-btn" onclick="cancelBooking('${key}')">Cancel</button>` : ''}
-                    `;
-                } else if (isOtherBooking) {
-                    rightContent = `
-                        <div>
-                            <div class="slot-status booked-other-text">✗ Booked</div>
-                            <div class="slot-duration">${booking.duration} min</div>
-                        </div>
-                    `;
+
+                if (blockStatus) {
+                    if (blockStatus.type === 'mine') {
+                        if (blockStatus.isStart) {
+                            // This is the actual booked slot - show cancel button
+                            item.className = 'slot-item booked-me';
+                            rightContent = `
+                                <div>
+                                    <div class="slot-status booked-me-text">✓ Your Booking</div>
+                                    <div class="slot-duration">${blockStatus.booking.duration} min session</div>
+                                </div>
+                                ${!past ? `<button class="cancel-btn" onclick="cancelBooking('${blockStatus.bookingKey}')">Cancel</button>` : ''}
+                            `;
+                        } else {
+                            // This slot is blocked by your own booking
+                            item.className = 'slot-item blocked-by-me';
+                            rightContent = `<div class="slot-status blocked-text" style="color:#66bb6a;">↕ Your Session</div>`;
+                        }
+                    } else {
+                        if (blockStatus.isStart) {
+                            // Another user's booked slot
+                            item.className = 'slot-item booked-other';
+                            rightContent = `
+                                <div>
+                                    <div class="slot-status booked-other-text">✗ Booked</div>
+                                    <div class="slot-duration">${blockStatus.booking.duration} min session</div>
+                                </div>
+                            `;
+                        } else {
+                            // Slot blocked by another user's booking
+                            item.className = 'slot-item blocked-by-other';
+                            rightContent = `<div class="slot-status booked-other-text">✗ Unavailable</div>`;
+                        }
+                    }
                 } else if (past) {
+                    item.className = 'slot-item available';
                     rightContent = `<div class="slot-status" style="color:#aaa;">Passed</div>`;
                 } else {
+                    item.className = 'slot-item available';
                     rightContent = `<button class="book-btn" onclick="openBookingModal('${slot.dateStr}','${slot.timeStr}','${day.type}','${displayTime}','${day.label}')">Book</button>`;
                 }
 
                 item.innerHTML = `
                     <div>
                         <div class="slot-time">${displayTime}</div>
-                        ${!isMyBooking && !isOtherBooking ? `<div class="slot-duration">Select duration when booking</div>` : ''}
+                        ${(!blockStatus && !past) ? `<div class="slot-duration">Select duration when booking</div>` : ''}
                     </div>
                     <div style="display:flex;align-items:center;gap:10px;">${rightContent}</div>
                 `;
@@ -627,9 +689,10 @@
 
         container.innerHTML = '';
         myBookings.forEach(([key, booking]) => {
-            const parts = key.split('_');
-            const dateStr = parts[0] + '-' + parts[1] + '-' + parts[2];
-            const timeStr = parts[3] + ':' + parts[4];
+            // key: dateStr_HH:MM
+            const underIdx = key.indexOf('_');
+            const dateStr = key.substring(0, underIdx);
+            const timeStr = key.substring(underIdx + 1);
             const [y, mo, day] = dateStr.split('-').map(Number);
             const d = new Date(y, mo - 1, day);
             const displayDate = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
@@ -638,12 +701,20 @@
             const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
             const displayTime = `${displayH}:${String(m).padStart(2, '0')} ${ampm}`;
 
+            // Calculate end time
+            const endMins = h * 60 + m + booking.duration;
+            const endH = Math.floor(endMins / 60);
+            const endM = endMins % 60;
+            const endAmpm = endH >= 12 ? 'PM' : 'AM';
+            const endDisplayH = endH > 12 ? endH - 12 : endH === 0 ? 12 : endH;
+            const endDisplayTime = `${endDisplayH}:${String(endM).padStart(2, '0')} ${endAmpm}`;
+
             const card = document.createElement('div');
             card.className = 'booking-card';
             card.innerHTML = `
                 <div class="booking-info">
-                    <p>${displayDate} at ${displayTime}</p>
-                    <span>${booking.duration}-minute session</span>
+                    <p>${displayDate}</p>
+                    <span>${displayTime} – ${endDisplayTime} (${booking.duration} min session)</span>
                 </div>
                 <button class="cancel-btn" onclick="cancelBooking('${key}')">Cancel</button>
             `;
@@ -670,12 +741,20 @@
             <p><strong>Therapist:</strong> Available Therapist</p>
         `;
 
+        // Disable durations that don't fit within day hours OR conflict with existing bookings
         [30, 60, 90].forEach(dur => {
             const el = document.getElementById('dur' + dur);
-            if (!slotFitsDuration(timeStr, dur, dayType)) {
+            const fitsDay = slotFitsDuration(timeStr, dur, dayType);
+            const conflictsBooking = durationConflictsWithBooking(dateStr, timeStr, dur);
+
+            if (!fitsDay) {
                 el.style.opacity = '0.4';
                 el.style.pointerEvents = 'none';
                 el.title = 'Does not fit within available hours';
+            } else if (conflictsBooking) {
+                el.style.opacity = '0.4';
+                el.style.pointerEvents = 'none';
+                el.title = 'Conflicts with an existing booking';
             } else {
                 el.style.opacity = '1';
                 el.style.pointerEvents = 'auto';
@@ -686,6 +765,31 @@
         document.getElementById('bookingModal').classList.add('active');
     }
 
+    /**
+     * Check if booking at dateStr/timeStr for 'duration' minutes would overlap any existing booking.
+     */
+    function durationConflictsWithBooking(dateStr, timeStr, duration) {
+        const startMins = timeToMins(timeStr);
+        const endMins = startMins + duration;
+
+        for (const [key, booking] of Object.entries(allBookings)) {
+            const underIdx = key.indexOf('_');
+            const bDate = key.substring(0, underIdx);
+            const bTime = key.substring(underIdx + 1);
+
+            if (bDate !== dateStr) continue;
+
+            const bStart = timeToMins(bTime);
+            const bEnd = bStart + booking.duration;
+
+            // Overlap check: [startMins, endMins) overlaps [bStart, bEnd)
+            if (startMins < bEnd && endMins > bStart) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function closeModal() {
         document.getElementById('bookingModal').classList.remove('active');
         selectedSlot = null;
@@ -694,6 +798,7 @@
 
     function selectDuration(d) {
         if (!slotFitsDuration(selectedSlot.timeStr, d, selectedSlot.dayType)) return;
+        if (durationConflictsWithBooking(selectedSlot.dateStr, selectedSlot.timeStr, d)) return;
         selectedDuration = d;
         document.getElementById('dur30').classList.toggle('selected', d === 30);
         document.getElementById('dur60').classList.toggle('selected', d === 60);
@@ -703,12 +808,13 @@
 
     async function confirmBooking() {
         if (!selectedSlot || !selectedDuration) return;
-        const key = selectedSlot.dateStr + '_' + selectedSlot.timeStr;
 
+        // Re-fetch to check for race conditions
         const latest = await dbGet('massage_bookings');
         const bookings = latest || {};
 
-        if (bookings[key]) {
+        // Check if the chosen duration would conflict with any existing booking
+        if (durationConflictsWithBookingInSet(selectedSlot.dateStr, selectedSlot.timeStr, selectedDuration, bookings)) {
             showToast('Sorry, this slot was just booked by someone else!');
             allBookings = bookings;
             closeModal();
@@ -716,6 +822,7 @@
             return;
         }
 
+        const key = selectedSlot.dateStr + '_' + selectedSlot.timeStr;
         bookings[key] = {
             userId: currentUser.id,
             userName: currentUser.name,
@@ -729,6 +836,27 @@
         renderWeek();
         renderMyBookings();
         showToast(`✓ Booked! ${selectedSlot.displayTime} for ${selectedDuration} minutes.`);
+    }
+
+    function durationConflictsWithBookingInSet(dateStr, timeStr, duration, bookings) {
+        const startMins = timeToMins(timeStr);
+        const endMins = startMins + duration;
+
+        for (const [key, booking] of Object.entries(bookings)) {
+            const underIdx = key.indexOf('_');
+            const bDate = key.substring(0, underIdx);
+            const bTime = key.substring(underIdx + 1);
+
+            if (bDate !== dateStr) continue;
+
+            const bStart = timeToMins(bTime);
+            const bEnd = bStart + booking.duration;
+
+            if (startMins < bEnd && endMins > bStart) {
+                return true;
+            }
+        }
+        return false;
     }
 
     async function cancelBooking(key) {
