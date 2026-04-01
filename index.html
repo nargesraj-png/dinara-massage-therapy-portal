@@ -1,0 +1,764 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serenity Massage Therapy - Book Appointment</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f0eb 0%, #e8ddd4 100%);
+            min-height: 100vh;
+            color: #3a2e2a;
+        }
+        header {
+            background: linear-gradient(135deg, #5c3d2e 0%, #8b5e3c 100%);
+            color: white;
+            padding: 20px 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        header h1 { font-size: 1.6rem; font-weight: 600; letter-spacing: 1px; }
+        header p { font-size: 0.85rem; opacity: 0.8; margin-top: 2px; }
+        .user-info { display: flex; align-items: center; gap: 12px; }
+        .user-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+        .logout-btn {
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+        .logout-btn:hover { background: rgba(255,255,255,0.25); }
+
+        /* LOGIN */
+        #loginScreen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: calc(100vh - 80px);
+            padding: 40px 20px;
+        }
+        .login-card {
+            background: white;
+            border-radius: 16px;
+            padding: 48px 40px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 8px 32px rgba(92,61,46,0.15);
+        }
+        .login-card h2 { font-size: 1.5rem; color: #5c3d2e; margin-bottom: 6px; text-align: center; }
+        .login-card p { color: #8b7355; text-align: center; margin-bottom: 30px; font-size: 0.9rem; }
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; font-size: 0.85rem; font-weight: 600; color: #5c3d2e; margin-bottom: 6px; }
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1.5px solid #d4c4b0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            color: #3a2e2a;
+            transition: border-color 0.2s;
+            outline: none;
+        }
+        .form-group input:focus { border-color: #8b5e3c; }
+        .login-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #5c3d2e, #8b5e3c);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: opacity 0.2s;
+        }
+        .login-btn:hover { opacity: 0.9; }
+        .login-error { color: #c0392b; font-size: 0.85rem; margin-top: 10px; text-align: center; display: none; }
+        .register-link { text-align: center; margin-top: 18px; font-size: 0.85rem; color: #8b7355; }
+        .register-link span { color: #8b5e3c; cursor: pointer; font-weight: 600; text-decoration: underline; }
+
+        /* MAIN APP */
+        #appScreen { display: none; padding: 30px 20px; max-width: 1100px; margin: 0 auto; }
+        .section-title { font-size: 1.3rem; font-weight: 700; color: #5c3d2e; margin-bottom: 6px; }
+        .section-sub { font-size: 0.9rem; color: #8b7355; margin-bottom: 24px; }
+
+        /* WEEK NAVIGATION */
+        .week-nav {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            background: white;
+            padding: 14px 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(92,61,46,0.08);
+        }
+        .week-nav button {
+            background: #f5f0eb;
+            border: 1.5px solid #d4c4b0;
+            color: #5c3d2e;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        .week-nav button:hover { background: #e8ddd4; }
+        .week-nav button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .week-label { font-weight: 600; color: #5c3d2e; flex: 1; text-align: center; }
+
+        /* DAY COLUMNS */
+        .days-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .day-card {
+            background: white;
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(92,61,46,0.1);
+        }
+        .day-header {
+            background: linear-gradient(135deg, #5c3d2e, #8b5e3c);
+            color: white;
+            padding: 14px 20px;
+        }
+        .day-header h3 { font-size: 1rem; font-weight: 700; }
+        .day-header p { font-size: 0.8rem; opacity: 0.85; margin-top: 2px; }
+        .slots-list { padding: 16px; }
+        .slot-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            border: 1.5px solid #e8ddd4;
+            transition: border-color 0.2s;
+        }
+        .slot-item.available { background: #f9f6f2; }
+        .slot-item.available:hover { border-color: #8b5e3c; }
+        .slot-item.booked-me { background: #e8f5e9; border-color: #66bb6a; }
+        .slot-item.booked-other { background: #fdf2f2; border-color: #ef9a9a; }
+        .slot-time { font-size: 0.88rem; font-weight: 600; color: #3a2e2a; }
+        .slot-duration { font-size: 0.78rem; color: #8b7355; margin-top: 2px; }
+        .slot-status { font-size: 0.78rem; font-weight: 600; }
+        .slot-status.available-text { color: #5c8a4a; }
+        .slot-status.booked-me-text { color: #388e3c; }
+        .slot-status.booked-other-text { color: #c62828; }
+        .book-btn {
+            background: linear-gradient(135deg, #5c3d2e, #8b5e3c);
+            color: white;
+            border: none;
+            padding: 7px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+        .book-btn:hover { opacity: 0.85; }
+        .cancel-btn {
+            background: #ef5350;
+            color: white;
+            border: none;
+            padding: 7px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+        .cancel-btn:hover { opacity: 0.85; }
+        .no-slots { color: #8b7355; font-size: 0.88rem; text-align: center; padding: 20px; }
+
+        /* MODAL */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 36px 32px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .modal h3 { font-size: 1.2rem; color: #5c3d2e; margin-bottom: 8px; }
+        .modal p { color: #8b7355; font-size: 0.9rem; margin-bottom: 20px; }
+        .modal-detail { background: #f5f0eb; border-radius: 8px; padding: 14px; margin-bottom: 20px; }
+        .modal-detail p { color: #3a2e2a; font-size: 0.9rem; margin-bottom: 4px; }
+        .modal-detail p:last-child { margin-bottom: 0; }
+        .modal-detail strong { color: #5c3d2e; }
+        .duration-select { margin-bottom: 20px; }
+        .duration-select label { display: block; font-size: 0.85rem; font-weight: 600; color: #5c3d2e; margin-bottom: 8px; }
+        .duration-options { display: flex; gap: 10px; }
+        .duration-opt {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #d4c4b0;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #5c3d2e;
+            transition: all 0.2s;
+        }
+        .duration-opt:hover { border-color: #8b5e3c; background: #f5f0eb; }
+        .duration-opt.selected { border-color: #5c3d2e; background: #5c3d2e; color: white; }
+        .modal-actions { display: flex; gap: 10px; }
+        .confirm-btn {
+            flex: 1;
+            background: linear-gradient(135deg, #5c3d2e, #8b5e3c);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .confirm-btn:hover { opacity: 0.9; }
+        .confirm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .cancel-modal-btn {
+            flex: 1;
+            background: #f5f0eb;
+            color: #5c3d2e;
+            border: 1.5px solid #d4c4b0;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .cancel-modal-btn:hover { background: #e8ddd4; }
+
+        /* MY BOOKINGS */
+        .my-bookings-section { margin-top: 10px; }
+        .my-bookings-section h2 { font-size: 1.1rem; font-weight: 700; color: #5c3d2e; margin-bottom: 14px; }
+        .booking-card {
+            background: white;
+            border-radius: 10px;
+            padding: 14px 18px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 6px rgba(92,61,46,0.08);
+            border-left: 4px solid #66bb6a;
+        }
+        .booking-info p { font-size: 0.88rem; color: #3a2e2a; font-weight: 600; }
+        .booking-info span { font-size: 0.8rem; color: #8b7355; }
+        .no-bookings { color: #8b7355; font-size: 0.88rem; padding: 10px 0; }
+
+        .loading { text-align: center; padding: 40px; color: #8b7355; }
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #5c3d2e;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            z-index: 2000;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s;
+            pointer-events: none;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+
+        @media (max-width: 600px) {
+            .days-grid { grid-template-columns: 1fr; }
+            .login-card { padding: 32px 24px; }
+            header { padding: 16px 20px; }
+            header h1 { font-size: 1.2rem; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div>
+        <h1>🌿 Serenity Massage Therapy</h1>
+        <p>Professional Wellness & Relaxation</p>
+    </div>
+    <div class="user-info" id="headerUser" style="display:none">
+        <span class="user-badge" id="headerUserName"></span>
+        <button class="logout-btn" onclick="logout()">Sign Out</button>
+    </div>
+</header>
+
+<!-- LOGIN SCREEN -->
+<div id="loginScreen">
+    <div class="login-card">
+        <h2>Welcome Back</h2>
+        <p>Sign in to book your massage therapy session</p>
+        <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="loginName" placeholder="e.g. Jane Smith" />
+        </div>
+        <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="loginEmail" placeholder="e.g. jane@email.com" />
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="loginPassword" placeholder="Enter your password" />
+        </div>
+        <p class="login-error" id="loginError">Please fill in all fields.</p>
+        <button class="login-btn" onclick="handleLogin()">Sign In / Register</button>
+        <div class="register-link">New guest? Just enter your details above to <span onclick="handleLogin()">create an account</span>.</div>
+    </div>
+</div>
+
+<!-- APP SCREEN -->
+<div id="appScreen">
+    <div class="section-title">Book Your Appointment</div>
+    <div class="section-sub">Select an available time slot below. Sessions are 30, 60, or 90 minutes.</div>
+
+    <div class="week-nav">
+        <button id="prevWeekBtn" onclick="changeWeek(-1)">&#8592; Prev</button>
+        <div class="week-label" id="weekLabel"></div>
+        <button id="nextWeekBtn" onclick="changeWeek(1)">Next &#8594;</button>
+    </div>
+
+    <div class="days-grid" id="daysGrid">
+        <div class="loading">Loading availability...</div>
+    </div>
+
+    <div class="my-bookings-section">
+        <h2>📋 My Upcoming Bookings</h2>
+        <div id="myBookingsList"><div class="no-bookings">No bookings yet.</div></div>
+    </div>
+</div>
+
+<!-- BOOKING MODAL -->
+<div class="modal-overlay" id="bookingModal">
+    <div class="modal">
+        <h3>Book Appointment</h3>
+        <p>Choose your session duration</p>
+        <div class="modal-detail" id="modalDetail"></div>
+        <div class="duration-select">
+            <label>Session Duration</label>
+            <div class="duration-options">
+                <div class="duration-opt" onclick="selectDuration(30)" id="dur30">30 min</div>
+                <div class="duration-opt" onclick="selectDuration(60)" id="dur60">60 min</div>
+                <div class="duration-opt" onclick="selectDuration(90)" id="dur90">90 min</div>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="cancel-modal-btn" onclick="closeModal()">Cancel</button>
+            <button class="confirm-btn" id="confirmBtn" onclick="confirmBooking()" disabled>Confirm Booking</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+    let currentUser = null;
+    let currentWeekOffset = 0;
+    let selectedSlot = null;
+    let selectedDuration = null;
+    let allBookings = {};
+    let pollInterval = null;
+
+    // ---- AUTH ----
+    async function handleLogin() {
+        const name = document.getElementById('loginName').value.trim();
+        const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+        const password = document.getElementById('loginPassword').value.trim();
+        const errEl = document.getElementById('loginError');
+
+        if (!name || !email || !password) {
+            errEl.style.display = 'block';
+            errEl.textContent = 'Please fill in all fields.';
+            return;
+        }
+        if (!email.includes('@')) {
+            errEl.style.display = 'block';
+            errEl.textContent = 'Please enter a valid email.';
+            return;
+        }
+
+        const userId = 'user_' + email.replace(/[^a-z0-9]/g, '_');
+        let userData = await window.db.get(userId);
+
+        if (userData) {
+            if (userData.password !== password) {
+                errEl.style.display = 'block';
+                errEl.textContent = 'Incorrect password for this email.';
+                return;
+            }
+        } else {
+            await window.db.set(userId, { name, email, password });
+        }
+
+        currentUser = { id: userId, name: userData ? userData.name : name, email };
+        errEl.style.display = 'none';
+        showApp();
+    }
+
+    function logout() {
+        currentUser = null;
+        if (pollInterval) clearInterval(pollInterval);
+        document.getElementById('loginScreen').style.display = 'flex';
+        document.getElementById('appScreen').style.display = 'none';
+        document.getElementById('headerUser').style.display = 'none';
+        document.getElementById('loginName').value = '';
+        document.getElementById('loginEmail').value = '';
+        document.getElementById('loginPassword').value = '';
+    }
+
+    function showApp() {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('appScreen').style.display = 'block';
+        document.getElementById('headerUser').style.display = 'flex';
+        document.getElementById('headerUserName').textContent = currentUser.name;
+        currentWeekOffset = 0;
+        loadAndRender();
+        if (pollInterval) clearInterval(pollInterval);
+        pollInterval = setInterval(loadAndRender, 3000);
+    }
+
+    // ---- DATE HELPERS ----
+    function getWeekDates(offset) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dayOfWeek = today.getDay(); // 0=Sun
+        // Find this week's Monday
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7) + offset * 7);
+        const wednesday = new Date(monday);
+        wednesday.setDate(monday.getDate() + 2);
+        return { monday, wednesday };
+    }
+
+    function formatDate(d) {
+        return d.toLocaleDateString('en-CA'); // YYYY-MM-DD
+    }
+
+    function formatDisplayDate(d) {
+        return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function isPast(dateStr, timeStr) {
+        const now = new Date();
+        const [h, m] = timeStr.split(':').map(Number);
+        const dt = new Date(dateStr + 'T' + timeStr);
+        return dt < now;
+    }
+
+    // ---- SLOT GENERATION ----
+    // Monday: 9 AM - 1 PM => slots at 9:00, 9:30, 10:00, 10:30, 11:00, 11:30, 12:00, 12:30
+    // Wednesday: 9 AM - 3:30 PM => slots at 9:00...15:00 (last start for 30min = 15:00, for 60min = 14:30, 90min = 14:00)
+    function generateSlots(dateStr, dayType) {
+        const slots = [];
+        let startH = 9, startM = 0;
+        let endH, endM;
+        if (dayType === 'monday') { endH = 13; endM = 0; }
+        else { endH = 15; endM = 30; }
+
+        let h = startH, m = startM;
+        while (h < endH || (h === endH && m < endM)) {
+            const timeStr = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+            slots.push({ dateStr, timeStr });
+            m += 30;
+            if (m >= 60) { m -= 60; h++; }
+        }
+        return slots;
+    }
+
+    // Check if a slot can fit a given duration without exceeding day end
+    function slotFitsDuration(timeStr, duration, dayType) {
+        const [h, m] = timeStr.split(':').map(Number);
+        const startMins = h * 60 + m;
+        const endMins = startMins + duration;
+        const dayEndMins = dayType === 'monday' ? 13 * 60 : 15 * 60 + 30;
+        return endMins <= dayEndMins;
+    }
+
+    // ---- LOAD & RENDER ----
+    async function loadAndRender() {
+        const bookingsData = await window.db.get('massage_bookings');
+        allBookings = bookingsData || {};
+        renderWeek();
+        renderMyBookings();
+    }
+
+    function renderWeek() {
+        const { monday, wednesday } = getWeekDates(currentWeekOffset);
+        const today = new Date(); today.setHours(0,0,0,0);
+
+        // Week label
+        const monStr = monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const wedStr = wednesday.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        document.getElementById('weekLabel').textContent = `Week of ${monStr} – ${wedStr}`;
+
+        // Disable prev if this week or past
+        document.getElementById('prevWeekBtn').disabled = currentWeekOffset <= 0;
+
+        const grid = document.getElementById('daysGrid');
+        grid.innerHTML = '';
+
+        const days = [
+            { date: monday, label: 'Monday', type: 'monday', hours: '9:00 AM – 1:00 PM' },
+            { date: wednesday, label: 'Wednesday', type: 'wednesday', hours: '9:00 AM – 3:30 PM' }
+        ];
+
+        days.forEach(day => {
+            const dateStr = formatDate(day.date);
+            const slots = generateSlots(dateStr, day.type);
+            const isPastDay = day.date < today;
+
+            const card = document.createElement('div');
+            card.className = 'day-card';
+            card.innerHTML = `
+                <div class="day-header">
+                    <h3>${day.label} — ${formatDisplayDate(day.date)}</h3>
+                    <p>Available: ${day.hours}</p>
+                </div>
+                <div class="slots-list" id="slots_${dateStr}"></div>
+            `;
+            grid.appendChild(card);
+
+            const slotsList = card.querySelector(`#slots_${dateStr}`);
+
+            if (isPastDay) {
+                slotsList.innerHTML = '<div class="no-slots">This day has passed.</div>';
+                return;
+            }
+
+            if (slots.length === 0) {
+                slotsList.innerHTML = '<div class="no-slots">No slots available.</div>';
+                return;
+            }
+
+            slots.forEach(slot => {
+                const key = slot.dateStr + '_' + slot.timeStr;
+                const booking = allBookings[key];
+                const isMyBooking = booking && booking.userId === currentUser.id;
+                const isOtherBooking = booking && booking.userId !== currentUser.id;
+                const past = isPast(slot.dateStr, slot.timeStr);
+
+                const item = document.createElement('div');
+                item.className = 'slot-item ' + (isMyBooking ? 'booked-me' : isOtherBooking ? 'booked-other' : 'available');
+
+                const [h, m] = slot.timeStr.split(':').map(Number);
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
+                const displayTime = `${displayH}:${String(m).padStart(2,'0')} ${ampm}`;
+
+                let rightContent = '';
+                if (isMyBooking) {
+                    rightContent = `
+                        <div>
+                            <div class="slot-status booked-me-text">✓ Your Booking</div>
+                            <div class="slot-duration">${booking.duration} min</div>
+                        </div>
+                        ${!past ? `<button class="cancel-btn" onclick="cancelBooking('${key}')">Cancel</button>` : ''}
+                    `;
+                } else if (isOtherBooking) {
+                    rightContent = `
+                        <div>
+                            <div class="slot-status booked-other-text">✗ Booked</div>
+                            <div class="slot-duration">${booking.duration} min</div>
+                        </div>
+                    `;
+                } else if (past) {
+                    rightContent = `<div class="slot-status" style="color:#aaa;">Passed</div>`;
+                } else {
+                    rightContent = `<button class="book-btn" onclick="openBookingModal('${slot.dateStr}','${slot.timeStr}','${day.type}','${displayTime}','${day.label}')">Book</button>`;
+                }
+
+                item.innerHTML = `
+                    <div>
+                        <div class="slot-time">${displayTime}</div>
+                        ${isMyBooking || isOtherBooking ? '' : `<div class="slot-duration">Select duration when booking</div>`}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;">${rightContent}</div>
+                `;
+                slotsList.appendChild(item);
+            });
+        });
+    }
+
+    function renderMyBookings() {
+        const container = document.getElementById('myBookingsList');
+        const myBookings = Object.entries(allBookings)
+            .filter(([k, v]) => v.userId === currentUser.id)
+            .sort(([a], [b]) => a.localeCompare(b));
+
+        if (myBookings.length === 0) {
+            container.innerHTML = '<div class="no-bookings">No bookings yet.</div>';
+            return;
+        }
+
+        container.innerHTML = '';
+        myBookings.forEach(([key, booking]) => {
+            const [dateStr, timeStr] = key.split('_');
+            const d = new Date(dateStr + 'T12:00:00');
+            const displayDate = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+            const [h, m] = timeStr.split(':').map(Number);
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
+            const displayTime = `${displayH}:${String(m).padStart(2,'0')} ${ampm}`;
+
+            const card = document.createElement('div');
+            card.className = 'booking-card';
+            card.innerHTML = `
+                <div class="booking-info">
+                    <p>${displayDate} at ${displayTime}</p>
+                    <span>${booking.duration}-minute session</span>
+                </div>
+                <button class="cancel-btn" onclick="cancelBooking('${key}')">Cancel</button>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    // ---- MODAL ----
+    function openBookingModal(dateStr, timeStr, dayType, displayTime, dayLabel) {
+        selectedSlot = { dateStr, timeStr, dayType, displayTime, dayLabel };
+        selectedDuration = null;
+        document.getElementById('dur30').classList.remove('selected');
+        document.getElementById('dur60').classList.remove('selected');
+        document.getElementById('dur90').classList.remove('selected');
+        document.getElementById('confirmBtn').disabled = true;
+
+        const d = new Date(dateStr + 'T12:00:00');
+        const displayDate = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+
+        document.getElementById('modalDetail').innerHTML = `
+            <p><strong>Date:</strong> ${displayDate}</p>
+            <p><strong>Start Time:</strong> ${displayTime}</p>
+            <p><strong>Therapist:</strong> Available Therapist</p>
+        `;
+
+        // Disable durations that don't fit
+        [30, 60, 90].forEach(d => {
+            const el = document.getElementById('dur' + d);
+            if (!slotFitsDuration(timeStr, d, dayType)) {
+                el.style.opacity = '0.4';
+                el.style.pointerEvents = 'none';
+                el.title = 'Does not fit within available hours';
+            } else {
+                el.style.opacity = '1';
+                el.style.pointerEvents = 'auto';
+                el.title = '';
+            }
+        });
+
+        document.getElementById('bookingModal').classList.add('active');
+    }
+
+    function closeModal() {
+        document.getElementById('bookingModal').classList.remove('active');
+        selectedSlot = null;
+        selectedDuration = null;
+    }
+
+    function selectDuration(d) {
+        if (!slotFitsDuration(selectedSlot.timeStr, d, selectedSlot.dayType)) return;
+        selectedDuration = d;
+        document.getElementById('dur30').classList.toggle('selected', d === 30);
+        document.getElementById('dur60').classList.toggle('selected', d === 60);
+        document.getElementById('dur90').classList.toggle('selected', d === 90);
+        document.getElementById('confirmBtn').disabled = false;
+    }
+
+    async function confirmBooking() {
+        if (!selectedSlot || !selectedDuration) return;
+        const key = selectedSlot.dateStr + '_' + selectedSlot.timeStr;
+
+        // Re-fetch to check race condition
+        const latest = await window.db.get('massage_bookings');
+        const bookings = latest || {};
+
+        if (bookings[key]) {
+            showToast('Sorry, this slot was just booked by someone else!');
+            allBookings = bookings;
+            closeModal();
+            renderWeek();
+            return;
+        }
+
+        bookings[key] = {
+            userId: currentUser.id,
+            userName: currentUser.name,
+            duration: selectedDuration,
+            bookedAt: new Date().toISOString()
+        };
+
+        await window.db.set('massage_bookings', bookings);
+        allBookings = bookings;
+        closeModal();
+        renderWeek();
+        renderMyBookings();
+        showToast(`✓ Booked! ${selectedSlot.displayTime} for ${selectedDuration} minutes.`);
+    }
+
+    async function cancelBooking(key) {
+        const latest = await window.db.get('massage_bookings');
+        const bookings = latest || {};
+        if (bookings[key] && bookings[key].userId === currentUser.id) {
+            delete bookings[key];
+            await window.db.set('massage_bookings', bookings);
+            allBookings = bookings;
+            renderWeek();
+            renderMyBookings();
+            showToast('Booking cancelled.');
+        }
+    }
+
+    function changeWeek(dir) {
+        currentWeekOffset += dir;
+        if (currentWeekOffset < 0) currentWeekOffset = 0;
+        renderWeek();
+    }
+
+    // ---- TOAST ----
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // Allow Enter key on login
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && document.getElementById('loginScreen').style.display !== 'none') {
+            handleLogin();
+        }
+    });
+</script>
+</body>
+</html>
