@@ -43,7 +43,6 @@
         }
         .logout-btn:hover { background: rgba(255,255,255,0.25); }
 
-        /* LOGIN */
         #loginScreen {
             display: flex;
             align-items: center;
@@ -90,14 +89,11 @@
         .login-btn:hover { opacity: 0.9; }
         .login-error { color: #c0392b; font-size: 0.85rem; margin-top: 10px; text-align: center; display: none; }
         .register-link { text-align: center; margin-top: 18px; font-size: 0.85rem; color: #8b7355; }
-        .register-link span { color: #8b5e3c; cursor: pointer; font-weight: 600; text-decoration: underline; }
 
-        /* MAIN APP */
         #appScreen { display: none; padding: 30px 20px; max-width: 1100px; margin: 0 auto; }
         .section-title { font-size: 1.3rem; font-weight: 700; color: #5c3d2e; margin-bottom: 6px; }
         .section-sub { font-size: 0.9rem; color: #8b7355; margin-bottom: 24px; }
 
-        /* WEEK NAVIGATION */
         .week-nav {
             display: flex;
             align-items: center;
@@ -122,7 +118,6 @@
         .week-nav button:disabled { opacity: 0.4; cursor: not-allowed; }
         .week-label { font-weight: 600; color: #5c3d2e; flex: 1; text-align: center; }
 
-        /* DAY COLUMNS */
         .days-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -189,7 +184,6 @@
         .cancel-btn:hover { opacity: 0.85; }
         .no-slots { color: #8b7355; font-size: 0.88rem; text-align: center; padding: 20px; }
 
-        /* MODAL */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -259,7 +253,6 @@
         }
         .cancel-modal-btn:hover { background: #e8ddd4; }
 
-        /* MY BOOKINGS */
         .my-bookings-section { margin-top: 10px; }
         .my-bookings-section h2 { font-size: 1.1rem; font-weight: 700; color: #5c3d2e; margin-bottom: 14px; }
         .booking-card {
@@ -277,7 +270,6 @@
         .booking-info span { font-size: 0.8rem; color: #8b7355; }
         .no-bookings { color: #8b7355; font-size: 0.88rem; padding: 10px 0; }
 
-        .loading { text-align: center; padding: 40px; color: #8b7355; }
         .toast {
             position: fixed;
             bottom: 24px;
@@ -316,7 +308,6 @@
     </div>
 </header>
 
-<!-- LOGIN SCREEN -->
 <div id="loginScreen">
     <div class="login-card">
         <h2>Welcome Back</h2>
@@ -335,11 +326,10 @@
         </div>
         <p class="login-error" id="loginError">Please fill in all fields.</p>
         <button class="login-btn" onclick="handleLogin()">Sign In / Register</button>
-        <div class="register-link">New guest? Just enter your details above to <span onclick="handleLogin()">create an account</span>.</div>
+        <div class="register-link">New guest? Just enter your details above to create an account.</div>
     </div>
 </div>
 
-<!-- APP SCREEN -->
 <div id="appScreen">
     <div class="section-title">Book Your Appointment</div>
     <div class="section-sub">Select an available time slot below. Sessions are 30, 60, or 90 minutes.</div>
@@ -350,9 +340,7 @@
         <button id="nextWeekBtn" onclick="changeWeek(1)">Next &#8594;</button>
     </div>
 
-    <div class="days-grid" id="daysGrid">
-        <div class="loading">Loading availability...</div>
-    </div>
+    <div class="days-grid" id="daysGrid"></div>
 
     <div class="my-bookings-section">
         <h2>📋 My Upcoming Bookings</h2>
@@ -360,7 +348,6 @@
     </div>
 </div>
 
-<!-- BOOKING MODAL -->
 <div class="modal-overlay" id="bookingModal">
     <div class="modal">
         <h3>Book Appointment</h3>
@@ -391,6 +378,28 @@
     let allBookings = {};
     let pollInterval = null;
 
+    // ---- DB ABSTRACTION (uses window.db if available, else in-memory shared via window.db) ----
+    async function dbGet(key) {
+        try {
+            if (window.db && typeof window.db.get === 'function') {
+                return await window.db.get(key);
+            }
+        } catch(e) {}
+        // Fallback: in-memory store (works for single session)
+        return window._memStore ? window._memStore[key] : null;
+    }
+
+    async function dbSet(key, data) {
+        try {
+            if (window.db && typeof window.db.set === 'function') {
+                return await window.db.set(key, data);
+            }
+        } catch(e) {}
+        // Fallback: in-memory store
+        if (!window._memStore) window._memStore = {};
+        window._memStore[key] = data;
+    }
+
     // ---- AUTH ----
     async function handleLogin() {
         const name = document.getElementById('loginName').value.trim();
@@ -410,7 +419,7 @@
         }
 
         const userId = 'user_' + email.replace(/[^a-z0-9]/g, '_');
-        let userData = await window.db.get(userId);
+        let userData = await dbGet(userId);
 
         if (userData) {
             if (userData.password !== password) {
@@ -419,7 +428,7 @@
                 return;
             }
         } else {
-            await window.db.set(userId, { name, email, password });
+            await dbSet(userId, { name, email, password });
         }
 
         currentUser = { id: userId, name: userData ? userData.name : name, email };
@@ -453,8 +462,7 @@
     function getWeekDates(offset) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const dayOfWeek = today.getDay(); // 0=Sun
-        // Find this week's Monday
+        const dayOfWeek = today.getDay();
         const monday = new Date(today);
         monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7) + offset * 7);
         const wednesday = new Date(monday);
@@ -463,7 +471,10 @@
     }
 
     function formatDate(d) {
-        return d.toLocaleDateString('en-CA'); // YYYY-MM-DD
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
     }
 
     function formatDisplayDate(d) {
@@ -472,24 +483,20 @@
 
     function isPast(dateStr, timeStr) {
         const now = new Date();
+        const [y, mo, day] = dateStr.split('-').map(Number);
         const [h, m] = timeStr.split(':').map(Number);
-        const dt = new Date(dateStr + 'T' + timeStr);
+        const dt = new Date(y, mo - 1, day, h, m);
         return dt < now;
     }
 
-    // ---- SLOT GENERATION ----
-    // Monday: 9 AM - 1 PM => slots at 9:00, 9:30, 10:00, 10:30, 11:00, 11:30, 12:00, 12:30
-    // Wednesday: 9 AM - 3:30 PM => slots at 9:00...15:00 (last start for 30min = 15:00, for 60min = 14:30, 90min = 14:00)
     function generateSlots(dateStr, dayType) {
         const slots = [];
-        let startH = 9, startM = 0;
-        let endH, endM;
-        if (dayType === 'monday') { endH = 13; endM = 0; }
-        else { endH = 15; endM = 30; }
+        let h = 9, m = 0;
+        let endH = dayType === 'monday' ? 13 : 15;
+        let endM = dayType === 'monday' ? 0 : 30;
 
-        let h = startH, m = startM;
         while (h < endH || (h === endH && m < endM)) {
-            const timeStr = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+            const timeStr = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
             slots.push({ dateStr, timeStr });
             m += 30;
             if (m >= 60) { m -= 60; h++; }
@@ -497,7 +504,6 @@
         return slots;
     }
 
-    // Check if a slot can fit a given duration without exceeding day end
     function slotFitsDuration(timeStr, duration, dayType) {
         const [h, m] = timeStr.split(':').map(Number);
         const startMins = h * 60 + m;
@@ -508,7 +514,7 @@
 
     // ---- LOAD & RENDER ----
     async function loadAndRender() {
-        const bookingsData = await window.db.get('massage_bookings');
+        const bookingsData = await dbGet('massage_bookings');
         allBookings = bookingsData || {};
         renderWeek();
         renderMyBookings();
@@ -516,14 +522,11 @@
 
     function renderWeek() {
         const { monday, wednesday } = getWeekDates(currentWeekOffset);
-        const today = new Date(); today.setHours(0,0,0,0);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
 
-        // Week label
         const monStr = monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         const wedStr = wednesday.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         document.getElementById('weekLabel').textContent = `Week of ${monStr} – ${wedStr}`;
-
-        // Disable prev if this week or past
         document.getElementById('prevWeekBtn').disabled = currentWeekOffset <= 0;
 
         const grid = document.getElementById('daysGrid');
@@ -546,11 +549,11 @@
                     <h3>${day.label} — ${formatDisplayDate(day.date)}</h3>
                     <p>Available: ${day.hours}</p>
                 </div>
-                <div class="slots-list" id="slots_${dateStr}"></div>
+                <div class="slots-list" id="slots_${dateStr.replace(/-/g,'_')}"></div>
             `;
             grid.appendChild(card);
 
-            const slotsList = card.querySelector(`#slots_${dateStr}`);
+            const slotsList = card.querySelector(`#slots_${dateStr.replace(/-/g,'_')}`);
 
             if (isPastDay) {
                 slotsList.innerHTML = '<div class="no-slots">This day has passed.</div>';
@@ -575,7 +578,7 @@
                 const [h, m] = slot.timeStr.split(':').map(Number);
                 const ampm = h >= 12 ? 'PM' : 'AM';
                 const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
-                const displayTime = `${displayH}:${String(m).padStart(2,'0')} ${ampm}`;
+                const displayTime = `${displayH}:${String(m).padStart(2, '0')} ${ampm}`;
 
                 let rightContent = '';
                 if (isMyBooking) {
@@ -602,7 +605,7 @@
                 item.innerHTML = `
                     <div>
                         <div class="slot-time">${displayTime}</div>
-                        ${isMyBooking || isOtherBooking ? '' : `<div class="slot-duration">Select duration when booking</div>`}
+                        ${!isMyBooking && !isOtherBooking ? `<div class="slot-duration">Select duration when booking</div>` : ''}
                     </div>
                     <div style="display:flex;align-items:center;gap:10px;">${rightContent}</div>
                 `;
@@ -624,13 +627,16 @@
 
         container.innerHTML = '';
         myBookings.forEach(([key, booking]) => {
-            const [dateStr, timeStr] = key.split('_');
-            const d = new Date(dateStr + 'T12:00:00');
+            const parts = key.split('_');
+            const dateStr = parts[0] + '-' + parts[1] + '-' + parts[2];
+            const timeStr = parts[3] + ':' + parts[4];
+            const [y, mo, day] = dateStr.split('-').map(Number);
+            const d = new Date(y, mo - 1, day);
             const displayDate = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
             const [h, m] = timeStr.split(':').map(Number);
             const ampm = h >= 12 ? 'PM' : 'AM';
             const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
-            const displayTime = `${displayH}:${String(m).padStart(2,'0')} ${ampm}`;
+            const displayTime = `${displayH}:${String(m).padStart(2, '0')} ${ampm}`;
 
             const card = document.createElement('div');
             card.className = 'booking-card';
@@ -649,12 +655,13 @@
     function openBookingModal(dateStr, timeStr, dayType, displayTime, dayLabel) {
         selectedSlot = { dateStr, timeStr, dayType, displayTime, dayLabel };
         selectedDuration = null;
-        document.getElementById('dur30').classList.remove('selected');
-        document.getElementById('dur60').classList.remove('selected');
-        document.getElementById('dur90').classList.remove('selected');
+        ['30','60','90'].forEach(d => {
+            document.getElementById('dur' + d).classList.remove('selected');
+        });
         document.getElementById('confirmBtn').disabled = true;
 
-        const d = new Date(dateStr + 'T12:00:00');
+        const [y, mo, day] = dateStr.split('-').map(Number);
+        const d = new Date(y, mo - 1, day);
         const displayDate = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
 
         document.getElementById('modalDetail').innerHTML = `
@@ -663,10 +670,9 @@
             <p><strong>Therapist:</strong> Available Therapist</p>
         `;
 
-        // Disable durations that don't fit
-        [30, 60, 90].forEach(d => {
-            const el = document.getElementById('dur' + d);
-            if (!slotFitsDuration(timeStr, d, dayType)) {
+        [30, 60, 90].forEach(dur => {
+            const el = document.getElementById('dur' + dur);
+            if (!slotFitsDuration(timeStr, dur, dayType)) {
                 el.style.opacity = '0.4';
                 el.style.pointerEvents = 'none';
                 el.title = 'Does not fit within available hours';
@@ -699,8 +705,7 @@
         if (!selectedSlot || !selectedDuration) return;
         const key = selectedSlot.dateStr + '_' + selectedSlot.timeStr;
 
-        // Re-fetch to check race condition
-        const latest = await window.db.get('massage_bookings');
+        const latest = await dbGet('massage_bookings');
         const bookings = latest || {};
 
         if (bookings[key]) {
@@ -718,7 +723,7 @@
             bookedAt: new Date().toISOString()
         };
 
-        await window.db.set('massage_bookings', bookings);
+        await dbSet('massage_bookings', bookings);
         allBookings = bookings;
         closeModal();
         renderWeek();
@@ -727,11 +732,11 @@
     }
 
     async function cancelBooking(key) {
-        const latest = await window.db.get('massage_bookings');
+        const latest = await dbGet('massage_bookings');
         const bookings = latest || {};
         if (bookings[key] && bookings[key].userId === currentUser.id) {
             delete bookings[key];
-            await window.db.set('massage_bookings', bookings);
+            await dbSet('massage_bookings', bookings);
             allBookings = bookings;
             renderWeek();
             renderMyBookings();
@@ -745,7 +750,6 @@
         renderWeek();
     }
 
-    // ---- TOAST ----
     function showToast(msg) {
         const t = document.getElementById('toast');
         t.textContent = msg;
@@ -753,7 +757,6 @@
         setTimeout(() => t.classList.remove('show'), 3000);
     }
 
-    // Allow Enter key on login
     document.addEventListener('keydown', e => {
         if (e.key === 'Enter' && document.getElementById('loginScreen').style.display !== 'none') {
             handleLogin();
