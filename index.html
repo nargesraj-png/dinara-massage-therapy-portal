@@ -159,7 +159,6 @@
         .slot-status { font-size: 0.78rem; font-weight: 600; }
         .slot-status.booked-me-text { color: #388e3c; }
         .slot-status.booked-other-text { color: #c62828; }
-        .slot-status.blocked-text { color: #888; }
         .book-btn {
             background: linear-gradient(135deg, #5c3d2e, #8b5e3c);
             color: white;
@@ -382,10 +381,12 @@
     let pollInterval = null;
 
     // ---- DB ABSTRACTION ----
+    // Uses window.db (FueliX) as primary, falls back to window._memStore (in-memory shared object)
     async function dbGet(key) {
         try {
             if (window.db && typeof window.db.get === 'function') {
-                return await window.db.get(key);
+                const result = await window.db.get(key);
+                return result;
             }
         } catch(e) {}
         if (!window._memStore) window._memStore = {};
@@ -395,11 +396,12 @@
     async function dbSet(key, data) {
         try {
             if (window.db && typeof window.db.set === 'function') {
-                return await window.db.set(key, data);
+                await window.db.set(key, data);
+                return;
             }
         } catch(e) {}
         if (!window._memStore) window._memStore = {};
-        window._memStore[key] = data;
+        window._memStore[key] = JSON.parse(JSON.stringify(data));
     }
 
     // ---- AUTH ----
@@ -457,7 +459,7 @@
         currentWeekOffset = 0;
         loadAndRender();
         if (pollInterval) clearInterval(pollInterval);
-        pollInterval = setInterval(loadAndRender, 3000);
+        pollInterval = setInterval(loadAndRender, 2000);
     }
 
     // ---- DATE HELPERS ----
@@ -496,18 +498,10 @@
         return h * 60 + m;
     }
 
-    function minsToTime(mins) {
-        const h = Math.floor(mins / 60);
-        const m = mins % 60;
-        return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
-    }
-
-    // Generate all 30-min slots for a day
     function generateSlots(dateStr, dayType) {
         const slots = [];
         let h = 9, m = 0;
         const endMins = dayType === 'monday' ? 13 * 60 : 15 * 60 + 30;
-
         while (h * 60 + m < endMins) {
             const timeStr = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
             slots.push({ dateStr, timeStr });
@@ -517,7 +511,6 @@
         return slots;
     }
 
-    // Check if a slot start time can fit a given duration within day hours
     function slotFitsDuration(timeStr, duration, dayType) {
         const startMins = timeToMins(timeStr);
         const endMins = startMins + duration;
@@ -527,14 +520,12 @@
 
     /**
      * For a given slot, check if it is blocked by any existing booking.
-     * A booking at startTime with duration X blocks all 30-min slots from startTime to startTime+X.
-     * Returns: null (free), { type: 'mine', bookingKey, booking } or { type: 'other', bookingKey, booking }
+     * Returns: null (free), or { type: 'mine'|'other', bookingKey, booking, isStart }
      */
     function getSlotBlockStatus(dateStr, timeStr, bookings) {
         const slotMins = timeToMins(timeStr);
 
         for (const [key, booking] of Object.entries(bookings)) {
-            // key format: dateStr_HH:MM  e.g. 2026-04-06_09:00
             const underIdx = key.indexOf('_');
             const bDate = key.substring(0, underIdx);
             const bTime = key.substring(underIdx + 1);
@@ -544,16 +535,38 @@
             const bStart = timeToMins(bTime);
             const bEnd = bStart + booking.duration;
 
-            // This slot falls within the booking's time range
             if (slotMins >= bStart && slotMins < bEnd) {
-                if (booking.userId === currentUser.id) {
-                    return { type: 'mine', bookingKey: key, booking, isStart: slotMins === bStart };
-                } else {
-                    return { type: 'other', bookingKey: key, booking, isStart: slotMins === bStart };
-                }
+                const isMine = booking.userId === currentUser.id;
+                return {
+                    type: isMine ? 'mine' : 'other',
+                    bookingKey: key,
+                    booking,
+                    isStart: slotMins === bStart
+                };
             }
         }
         return null;
+    }
+
+    function durationConflictsWithBookingInSet(dateStr, timeStr, duration, bookings) {
+        const startMins = timeToMins(timeStr);
+        const endMins = startMins + duration;
+
+        for (const [key, booking] of Object.entries(bookings)) {
+            const underIdx = key.indexOf('_');
+            const bDate = key.substring(0, underIdx);
+            const bTime = key.substring(underIdx + 1);
+
+            if (bDate !== dateStr) continue;
+
+            const bStart = timeToMins(bTime);
+            const bEnd = bStart + booking.duration;
+
+            if (startMins < bEnd && endMins > bStart) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---- LOAD & RENDER ----
@@ -626,7 +639,6 @@
                 if (blockStatus) {
                     if (blockStatus.type === 'mine') {
                         if (blockStatus.isStart) {
-                            // This is the actual booked slot - show cancel button
                             item.className = 'slot-item booked-me';
                             rightContent = `
                                 <div>
@@ -636,13 +648,11 @@
                                 ${!past ? `<button class="cancel-btn" onclick="cancelBooking('${blockStatus.bookingKey}')">Cancel</button>` : ''}
                             `;
                         } else {
-                            // This slot is blocked by your own booking
                             item.className = 'slot-item blocked-by-me';
-                            rightContent = `<div class="slot-status blocked-text" style="color:#66bb6a;">↕ Your Session</div>`;
+                            rightContent = `<div class="slot-status" style="color:#66bb6a;">↕ Your Session</div>`;
                         }
                     } else {
                         if (blockStatus.isStart) {
-                            // Another user's booked slot
                             item.className = 'slot-item booked-other';
                             rightContent = `
                                 <div>
@@ -651,7 +661,6 @@
                                 </div>
                             `;
                         } else {
-                            // Slot blocked by another user's booking
                             item.className = 'slot-item blocked-by-other';
                             rightContent = `<div class="slot-status booked-other-text">✗ Unavailable</div>`;
                         }
@@ -689,7 +698,6 @@
 
         container.innerHTML = '';
         myBookings.forEach(([key, booking]) => {
-            // key: dateStr_HH:MM
             const underIdx = key.indexOf('_');
             const dateStr = key.substring(0, underIdx);
             const timeStr = key.substring(underIdx + 1);
@@ -701,7 +709,6 @@
             const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
             const displayTime = `${displayH}:${String(m).padStart(2, '0')} ${ampm}`;
 
-            // Calculate end time
             const endMins = h * 60 + m + booking.duration;
             const endH = Math.floor(endMins / 60);
             const endM = endMins % 60;
@@ -741,17 +748,16 @@
             <p><strong>Therapist:</strong> Available Therapist</p>
         `;
 
-        // Disable durations that don't fit within day hours OR conflict with existing bookings
         [30, 60, 90].forEach(dur => {
             const el = document.getElementById('dur' + dur);
             const fitsDay = slotFitsDuration(timeStr, dur, dayType);
-            const conflictsBooking = durationConflictsWithBooking(dateStr, timeStr, dur);
+            const conflicts = durationConflictsWithBookingInSet(dateStr, timeStr, dur, allBookings);
 
             if (!fitsDay) {
                 el.style.opacity = '0.4';
                 el.style.pointerEvents = 'none';
                 el.title = 'Does not fit within available hours';
-            } else if (conflictsBooking) {
+            } else if (conflicts) {
                 el.style.opacity = '0.4';
                 el.style.pointerEvents = 'none';
                 el.title = 'Conflicts with an existing booking';
@@ -765,31 +771,6 @@
         document.getElementById('bookingModal').classList.add('active');
     }
 
-    /**
-     * Check if booking at dateStr/timeStr for 'duration' minutes would overlap any existing booking.
-     */
-    function durationConflictsWithBooking(dateStr, timeStr, duration) {
-        const startMins = timeToMins(timeStr);
-        const endMins = startMins + duration;
-
-        for (const [key, booking] of Object.entries(allBookings)) {
-            const underIdx = key.indexOf('_');
-            const bDate = key.substring(0, underIdx);
-            const bTime = key.substring(underIdx + 1);
-
-            if (bDate !== dateStr) continue;
-
-            const bStart = timeToMins(bTime);
-            const bEnd = bStart + booking.duration;
-
-            // Overlap check: [startMins, endMins) overlaps [bStart, bEnd)
-            if (startMins < bEnd && endMins > bStart) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     function closeModal() {
         document.getElementById('bookingModal').classList.remove('active');
         selectedSlot = null;
@@ -798,7 +779,7 @@
 
     function selectDuration(d) {
         if (!slotFitsDuration(selectedSlot.timeStr, d, selectedSlot.dayType)) return;
-        if (durationConflictsWithBooking(selectedSlot.dateStr, selectedSlot.timeStr, d)) return;
+        if (durationConflictsWithBookingInSet(selectedSlot.dateStr, selectedSlot.timeStr, d, allBookings)) return;
         selectedDuration = d;
         document.getElementById('dur30').classList.toggle('selected', d === 30);
         document.getElementById('dur60').classList.toggle('selected', d === 60);
@@ -809,11 +790,9 @@
     async function confirmBooking() {
         if (!selectedSlot || !selectedDuration) return;
 
-        // Re-fetch to check for race conditions
         const latest = await dbGet('massage_bookings');
         const bookings = latest || {};
 
-        // Check if the chosen duration would conflict with any existing booking
         if (durationConflictsWithBookingInSet(selectedSlot.dateStr, selectedSlot.timeStr, selectedDuration, bookings)) {
             showToast('Sorry, this slot was just booked by someone else!');
             allBookings = bookings;
@@ -836,27 +815,6 @@
         renderWeek();
         renderMyBookings();
         showToast(`✓ Booked! ${selectedSlot.displayTime} for ${selectedDuration} minutes.`);
-    }
-
-    function durationConflictsWithBookingInSet(dateStr, timeStr, duration, bookings) {
-        const startMins = timeToMins(timeStr);
-        const endMins = startMins + duration;
-
-        for (const [key, booking] of Object.entries(bookings)) {
-            const underIdx = key.indexOf('_');
-            const bDate = key.substring(0, underIdx);
-            const bTime = key.substring(underIdx + 1);
-
-            if (bDate !== dateStr) continue;
-
-            const bStart = timeToMins(bTime);
-            const bEnd = bStart + booking.duration;
-
-            if (startMins < bEnd && endMins > bStart) {
-                return true;
-            }
-        }
-        return false;
     }
 
     async function cancelBooking(key) {
